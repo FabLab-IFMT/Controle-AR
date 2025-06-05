@@ -1,3 +1,10 @@
+#include "config.h" // Deve ser o config.h específico do dispositivo sendo compilado
+// TODO: Refatorar para incluir e usar os seguintes módulos:
+// #include "wifi_manager.h"
+// #include "ir_handler.h"
+// #include "web_server_handler.h"
+// #include "api_client.h"
+// #include "sensor_handler.h" // (Para lerTemperaturaAmbiente, calcularConsumoEnergia)
 #include <Arduino.h>
 #include <IRremote.h>
 #include <WiFi.h>
@@ -6,37 +13,39 @@
 #include <ArduinoJson.h>
 #include <stdlib.h> // Para alocação dinâmica de memória
 
-#include "temperature_codes.h" // Arquivo que contém os códigos de frequência/temperatura
+// #include "temperature_codes.h" // Arquivo que contém os códigos de frequência/temperatura
 
+// TODO: MOVER PARA ir_handler.cpp (PINOS), sensor_handler.cpp (PINOS)
 // ============= CONFIGURAÇÃO DO HARDWARE =============
 // Pino do LED IR
-const int PINO_IR = 23; // Ajuste conforme sua conexão
+// const int PINO_IR = 23; // Ajuste conforme sua conexão
 
 // Pino do LED de status
-const int PINO_LED_STATUS = 2; // LED embutido do ESP32
+// const int PINO_LED_STATUS = 2; // LED embutido do ESP32
 
 // Pinos para sensores (simulados por enquanto)
-const int PINO_SENSOR_TEMPERATURA = 36; // ADC
-const int PINO_SENSOR_CORRENTE = 39; // ADC
+// const int PINO_SENSOR_TEMPERATURA = 36; // ADC
+// const int PINO_SENSOR_CORRENTE = 39; // ADC
 
 // ============= CONFIGURAÇÃO DE REDE =============
 // Variáveis de conexão Wi-Fi
-const char* ssid = "Fabnet";      // Substitua pelo seu SSID
-const char* senha = "71037523";    // Substitua pela sua senha
+// const char* ssid = "Fabnet";      // Substitua pelo seu SSID
+// const char* senha = "71037523";    // Substitua pela sua senha
 
 // Configuração de IP fixo (opcional)
-IPAddress ip(192, 168, 1, 113);        // IP desejado para o ESP32
-IPAddress gateway(192, 168, 1, 1);     // Gateway da sua rede
-IPAddress subnet(255, 255, 255, 0);    // Máscara de sub-rede
+// IPAddress ip(192, 168, 1, 113);        // IP desejado para o ESP32
+// IPAddress gateway(192, 168, 1, 1);     // Gateway da sua rede
+// IPAddress subnet(255, 255, 255, 0);    // Máscara de sub-rede
 
 // Endereço do servidor Django
-const char* servidorDjango = "192.168.1.100";  // Substitua pelo IP do seu servidor Django
-const int portaDjango = 8000;                  // Porta do servidor Django
-const char* tagDispositivo = "ar-sala-reunioes"; // Identificador único deste dispositivo
+// const char* servidorDjango = "192.168.1.100";  // Substitua pelo IP do seu servidor Django
+// const int portaDjango = 8000;                  // Porta do servidor Django
+// const char* tagDispositivo = "ar-sala-reunioes"; // Identificador único deste dispositivo
 
 // Servidor Web assíncrono
-AsyncWebServer servidor(80);
+AsyncWebServer servidor(80); // TODO: Esta instância pode precisar ser gerenciada ou passada para web_server_handler.cpp
 
+// TODO: MOVER ESTADO PARA UM STRUCT OU CLASSE DE GERENCIAMENTO DE ESTADO
 // ============= VARIÁVEIS DE ESTADO DO AR-CONDICIONADO =============
 uint8_t temperaturaAtual = 20;        // Temperatura inicial definida para 20°C
 bool arCondicionadoLigado = false;    // Estado inicial do ar-condicionado
@@ -54,8 +63,9 @@ unsigned long ultimaPing = 0;         // Último momento em que enviamos dados a
 const unsigned long intervaloEnvioDados = 30000; // Enviar dados a cada 30 segundos
 
 // Status da conexão WiFi
-bool wifiConectado = false;
+bool wifiConectado = false; // TODO: Mover para wifi_manager.cpp e gerenciar internamente lá
 
+// TODO: MOVER PARA ir_handler.cpp
 // ============= FUNÇÕES DE COMUNICAÇÃO IR =============
 
 // Função para enviar comando de temperatura
@@ -64,10 +74,10 @@ bool enviarComandoTemperatura(uint8_t temperatura) {
     Serial.println("Ar-condicionado está desligado. Ligue-o primeiro.");
     return false;
   }
-  
+
   Serial.print("Enviando comando de temperatura: ");
   Serial.println(temperatura);
-  
+
   for (int i = 0; i < sizeof(temperatureCodes) / sizeof(temperatureCodes[0]); i++) {
     if (temperatureCodes[i].temperature == temperatura) {
       uint16_t* buffer = (uint16_t*)malloc(temperatureCodes[i].length * sizeof(uint16_t));
@@ -75,18 +85,18 @@ bool enviarComandoTemperatura(uint8_t temperatura) {
         Serial.println("Erro ao alocar memória para o buffer");
         return false;
       }
-      
+
       memcpy_P(buffer, temperatureCodes[i].rawData, temperatureCodes[i].length * sizeof(uint16_t));
       IrSender.sendRaw(buffer, temperatureCodes[i].length, 38);
       free(buffer);
-      
+
       Serial.print("Comando de temperatura enviado: ");
       Serial.print(temperatura);
       Serial.println("°C");
       return true;
     }
   }
-  
+
   Serial.println("Temperatura não encontrada nos códigos armazenados.");
   return false;
 }
@@ -128,11 +138,11 @@ void enviarComandoLigar() {
     Serial.println("Erro ao alocar memória para o buffer");
     return;
   }
-  
+
   memcpy_P(buffer, onCommand20.rawData, onCommand20.length * sizeof(uint16_t));
   IrSender.sendRaw(buffer, onCommand20.length, 38);
   free(buffer);
-  
+
   Serial.println("Comando 'Ligar' enviado com temperatura de 20°C.");
 }
 
@@ -146,13 +156,13 @@ void enviarComandoDesligar() {
     Serial.println("Erro ao alocar memória para o buffer");
     return;
   }
-  
+
   memcpy_P(buffer, offCommand.rawData, offCommand.length * sizeof(uint16_t));
   IrSender.sendRaw(buffer, offCommand.length, 38);
   free(buffer);
-  
+
   Serial.println("Comando 'Desligar' enviado");
-  
+
   // Zeramos o consumo quando o ar é desligado
   consumoEnergia = 0.0;
 }
@@ -163,14 +173,14 @@ bool enviarComandoModo(String modo) {
     Serial.println("Ar-condicionado está desligado. Ligue-o primeiro.");
     return false;
   }
-  
+
   Serial.print("Enviando comando de modo: ");
   Serial.println(modo);
-  
+
   // Esta função é um placeholder - você precisaria adicionar os códigos IR reais para os diferentes modos
   // Por agora apenas atualizamos o modo armazenado
   modoOperacao = modo;
-  
+
   // Aqui você adicionaria o código real para enviar o comando IR
   Serial.println("Comando de modo enviado (simulado)");
   return true;
@@ -182,18 +192,18 @@ bool enviarComandoVelocidade(uint8_t velocidade) {
     Serial.println("Ar-condicionado está desligado. Ligue-o primeiro.");
     return false;
   }
-  
+
   if (velocidade < 1 || velocidade > 4) {
     Serial.println("Velocidade inválida. Use valores de 1 a 4.");
     return false;
   }
-  
+
   Serial.print("Enviando comando de velocidade: ");
   Serial.println(velocidade);
-  
+
   // Esta função é um placeholder - você precisaria adicionar os códigos IR reais
   velocidadeVentilador = velocidade;
-  
+
   // Aqui você adicionaria o código real para enviar o comando IR
   Serial.println("Comando de velocidade enviado (simulado)");
   return true;
@@ -205,18 +215,19 @@ bool enviarComandoSwing(bool ativar) {
     Serial.println("Ar-condicionado está desligado. Ligue-o primeiro.");
     return false;
   }
-  
+
   Serial.print("Enviando comando de swing: ");
   Serial.println(ativar ? "Ativar" : "Desativar");
-  
+
   // Esta função é um placeholder - você precisaria adicionar os códigos IR reais
   swingAtivado = ativar;
-  
+
   // Aqui você adicionaria o código real para enviar o comando IR
   Serial.println("Comando de swing enviado (simulado)");
   return true;
 }
 
+// TODO: MOVER PARA sensor_handler.cpp (ou um novo módulo)
 // ============= FUNÇÕES DE SENSORES =============
 
 // Função para ler temperatura ambiente (simulada)
@@ -227,14 +238,14 @@ float lerTemperaturaAmbiente() {
     // Se o ar está ligado, a temperatura tende a aproximar-se da temperatura definida
     float diferenca = temperaturaAmbiente - temperaturaAtual;
     temperaturaAmbiente -= diferenca * 0.05; // Ajuste lento em direção à temperatura definida
-    
+
     // Adiciona um pouco de oscilação aleatória
     temperaturaAmbiente += random(-10, 10) / 100.0;
   } else {
     // Se o ar está desligado, a temperatura oscila em torno de um valor ambiente
     temperaturaAmbiente = 25.0 + random(-20, 20) / 10.0;  // 23.0 a 27.0
   }
-  
+
   return temperaturaAmbiente;
 }
 
@@ -243,18 +254,18 @@ float calcularConsumoEnergia() {
   if (!arCondicionadoLigado) {
     return 0.0;
   }
-  
+
   // Valores típicos para ar-condicionados:
   // - Split 9000 BTUs: ~800W = 0.8kWh
   // - Split 12000 BTUs: ~1100W = 1.1kWh
-  
+
   // Base de consumo
   float consumoBase = 0.9; // kW/h para um ar médio
-  
+
   // Ajusta com base na temperatura (quanto mais distante da ambiente, mais consome)
   float diferencaTemp = abs(temperaturaAmbiente - temperaturaAtual);
   float fatorTemp = 1.0 + (diferencaTemp / 10.0); // 10°C de diferença = 100% a mais
-  
+
   // Ajusta com base no modo
   float fatorModo = 1.0;
   if (modoOperacao == "cold") {
@@ -268,19 +279,20 @@ float calcularConsumoEnergia() {
   } else if (modoOperacao == "fan") {
     fatorModo = 0.3; // Ventilação consome menos
   }
-  
+
   // Ajusta com base na velocidade do ventilador
   float fatorVelocidade = 0.8 + (0.1 * velocidadeVentilador);
-  
+
   // Calcula o consumo
   float consumo = consumoBase * fatorTemp * fatorModo * fatorVelocidade;
-  
+
   // Adiciona alguma variação aleatória
   consumo += random(-5, 5) / 100.0;
-  
+
   return max(consumo, 0.1); // No mínimo 0.1 kWh se estiver ligado
 }
 
+// TODO: MOVER PARA api_client.cpp
 // ============= FUNÇÕES DE COMUNICAÇÃO COM O SERVIDOR =============
 
 // Função para enviar dados ao servidor Django
@@ -289,25 +301,25 @@ void enviarDadosParaServidor() {
     Serial.println("WiFi não conectado. Não é possível enviar dados.");
     return;
   }
-  
+
   HTTPClient http;
-  
+
   // URL do endpoint API no sistema Django
   String url = "http://";
-  url += String(servidorDjango);
+  url += String(DJANGO_SERVER_IP); // Modificado para usar macro de config.h
   url += ":";
-  url += String(portaDjango);
+  url += String(DJANGO_SERVER_PORT); // Modificado para usar macro de config.h
   url += "/painelar/api/status/";
-  
+
   Serial.print("Enviando dados para: ");
   Serial.println(url);
-  
+
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  
+
   // Preparar o documento JSON
   DynamicJsonDocument doc(256);
-  doc["tag"] = tagDispositivo;
+  doc["tag"] = DEVICE_TAG; // Modificado para usar macro de config.h
   doc["temperatura_ambiente"] = temperaturaAmbiente;
   doc["consumo"] = consumoEnergia;
   doc["estado"] = arCondicionadoLigado;
@@ -315,13 +327,13 @@ void enviarDadosParaServidor() {
   doc["modo"] = modoOperacao;
   doc["velocidade"] = velocidadeVentilador;
   doc["swing"] = swingAtivado;
-  
+
   String requestBody;
   serializeJson(doc, requestBody);
-  
+
   // Enviar requisição
   int httpResponseCode = http.POST(requestBody);
-  
+
   // Verificar resposta
   if (httpResponseCode > 0) {
     String resposta = http.getString();
@@ -329,20 +341,20 @@ void enviarDadosParaServidor() {
     Serial.println(httpResponseCode);
     Serial.print("Corpo da resposta: ");
     Serial.println(resposta);
-    
+
     // Analisar a resposta para verificar se há comandos
     DynamicJsonDocument docResposta(512);
     DeserializationError error = deserializeJson(docResposta, resposta);
-    
+
     if (!error) {
       String status = docResposta["status"];
       if (status == "success") {
         String comando = docResposta["comando"];
-        
+
         if (comando != "none") {
           Serial.print("Comando recebido: ");
           Serial.println(comando);
-          
+
           // Executar o comando recebido
           executarComando(comando);
         }
@@ -352,7 +364,7 @@ void enviarDadosParaServidor() {
     Serial.print("Erro na requisição HTTP: ");
     Serial.println(httpResponseCode);
   }
-  
+
   http.end();
 }
 
@@ -386,6 +398,7 @@ void executarComando(String comando) {
   }
 }
 
+// TODO: MOVER PARA web_server_handler.cpp
 // ============= CONFIGURAÇÃO DE ENDPOINTS HTTP =============
 
 void configurarEndpoints() {
@@ -551,9 +564,9 @@ void configurarEndpoints() {
     info += "Endereço MAC: " + WiFi.macAddress() + "\n";
     info += "Endereço IP: " + WiFi.localIP().toString() + "\n";
     info += "RSSI WiFi: " + String(WiFi.RSSI()) + " dBm\n";
-    info += "Servidor Django: " + String(servidorDjango) + ":" + String(portaDjango) + "\n";
-    info += "Tag do dispositivo: " + String(tagDispositivo) + "\n\n";
-    
+    info += "Servidor Django: " + String(DJANGO_SERVER_IP) + ":" + String(DJANGO_SERVER_PORT) + "\n"; // Modificado para usar macros
+    info += "Tag do dispositivo: " + String(DEVICE_TAG) + "\n\n"; // Modificado para usar macro
+
     info += "----------------------------------------\n";
     info += "Status do Ar-condicionado:\n";
     info += "----------------------------------------\n";
@@ -564,13 +577,13 @@ void configurarEndpoints() {
     info += "Velocidade: " + String(velocidadeVentilador) + "\n";
     info += "Swing: " + String(swingAtivado ? "Ativado" : "Desativado") + "\n";
     info += "Consumo: " + String(consumoEnergia, 2) + " kW/h\n\n";
-    
+
     info += "----------------------------------------\n";
     info += "Sistema:\n";
     info += "----------------------------------------\n";
     info += "Tempo ligado: " + String(millis() / 1000) + " segundos\n";
     info += "Heap livre: " + String(ESP.getFreeHeap()) + " bytes\n";
-    
+
     request->send(200, "text/plain", info);
   });
 
@@ -589,57 +602,63 @@ void setup() {
   Serial.println("----------------------------------------");
 
   // Inicializa o emissor IR
-  IrSender.begin(PINO_IR);
-  Serial.println("Emissor IR iniciado no pino " + String(PINO_IR));
+  // TODO: CHAMAR setupIR() de ir_handler.h
+  // Ex: setupIR(); // Substitui as duas linhas abaixo
+  IrSender.begin(PINO_IR_TX); // Modificado para usar PINO_IR_TX de config.h
+  Serial.println("Emissor IR iniciado no pino " + String(PINO_IR_TX));
 
   // Configura o LED de status
-  pinMode(PINO_LED_STATUS, OUTPUT);
+  pinMode(PINO_LED_STATUS, OUTPUT); // Este pino é de config.h, ok aqui ou no wifi_manager
   digitalWrite(PINO_LED_STATUS, LOW);
 
   // Conecta na rede Wi-Fi
+  // TODO: CHAMAR setupWiFi() de wifi_manager.h
+  // Ex: setupWiFi(); // Substitui todo o bloco de conexão WiFi abaixo
   WiFi.mode(WIFI_STA);
-  
+
   // Opcionalmente usa IP fixo
-  // WiFi.config(ip, gateway, subnet);
-  
-  WiFi.begin(ssid, senha);
+  // WiFi.config(DEVICE_IP, DEVICE_GATEWAY, DEVICE_SUBNET); // Modificado para usar macros de config.h
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD); // Modificado para usar macros de config.h
   Serial.print("Conectando ao Wi-Fi: ");
-  Serial.println(ssid);
+  Serial.println(WIFI_SSID);
 
   unsigned long inicioTentativa = millis();
   const unsigned long tempoLimiteWiFi = 30000; // Timeout de 30 segundos
 
   // Pisca LED enquanto tenta conectar
   while (WiFi.status() != WL_CONNECTED && millis() - inicioTentativa < tempoLimiteWiFi) {
-    digitalWrite(PINO_LED_STATUS, !digitalRead(PINO_LED_STATUS));
+    digitalWrite(PINO_LED_STATUS, !digitalRead(PINO_LED_STATUS)); // Usa PINO_LED_STATUS de config.h
     delay(500);
     Serial.print(".");
   }
-  
+
   Serial.println();
 
   if (WiFi.status() == WL_CONNECTED) {
     wifiConectado = true;
     Serial.print("Conectado ao Wi-Fi com o endereço IP: ");
     Serial.println(WiFi.localIP());
-    
+
     // LED fica aceso quando conectado
-    digitalWrite(PINO_LED_STATUS, HIGH);
+    digitalWrite(PINO_LED_STATUS, HIGH); // Usa PINO_LED_STATUS de config.h
   } else {
     wifiConectado = false;
     Serial.println("Falha ao conectar ao Wi-Fi. Tempo limite alcançado.");
-    
+
     // LED apagado indica falha na conexão
-    digitalWrite(PINO_LED_STATUS, LOW);
+    digitalWrite(PINO_LED_STATUS, LOW); // Usa PINO_LED_STATUS de config.h
   }
 
   // Configura endpoints HTTP
+  // TODO: CHAMAR setupWebServer() de web_server_handler.h
+  // Ex: setupWebServer(); // Substitui a linha abaixo
   configurarEndpoints();
 
   // Inicia o servidor HTTP
-  servidor.begin();
+  servidor.begin(); // Este begin() tem que ser chamado após setupWebServer()
   Serial.println("Servidor HTTP iniciado na porta 80");
-  
+
   // Log de inicialização concluída
   Serial.println("----------------------------------------");
   Serial.println("Inicialização concluída!");
@@ -649,15 +668,17 @@ void setup() {
 // ============= FUNÇÃO LOOP (EXECUTADA CONTINUAMENTE) =============
 void loop() {
   // Verifica a conexão WiFi
+  // TODO: CHAMAR handleWiFiConnection() de wifi_manager.h
+  // Ex: handleWiFiConnection(); // Substitui o bloco if/else abaixo
   if (WiFi.status() != WL_CONNECTED) {
     // Se perdeu a conexão mas estava conectado antes
     if (wifiConectado) {
       Serial.println("Conexão WiFi perdida. Tentando reconectar...");
       wifiConectado = false;
-      
+
       // LED apagado indica desconexão
-      digitalWrite(PINO_LED_STATUS, LOW);
-      
+      digitalWrite(PINO_LED_STATUS, LOW); // Usa PINO_LED_STATUS de config.h
+
       // Tenta reconectar
       WiFi.reconnect();
     }
@@ -667,9 +688,9 @@ void loop() {
       Serial.print("WiFi reconectado. IP: ");
       Serial.println(WiFi.localIP());
       wifiConectado = true;
-      
+
       // LED aceso indica reconexão
-      digitalWrite(PINO_LED_STATUS, HIGH);
+      digitalWrite(PINO_LED_STATUS, HIGH); // Usa PINO_LED_STATUS de config.h
     }
   }
 
@@ -677,11 +698,11 @@ void loop() {
   static unsigned long ultimaLeitura = 0;
   if (millis() - ultimaLeitura > 5000) {
     ultimaLeitura = millis();
-    
+
     // Atualiza leituras simuladas
     temperaturaAmbiente = lerTemperaturaAmbiente();
     consumoEnergia = calcularConsumoEnergia();
-    
+
     // Log das leituras atuais
     Serial.println("----------------------------------------");
     Serial.println("Leituras atualizadas:");
@@ -691,23 +712,25 @@ void loop() {
   }
 
   // Envia dados para o servidor a cada intervalo definido
+  // TODO: CHAMAR enviarDadosParaServidorAPI() de api_client.h (após verificar isWifiConnected())
+  // Ex: if (isWifiConnected() && millis() - ultimaPing > intervaloEnvioDados) { ... }
   if (wifiConectado && millis() - ultimaPing > intervaloEnvioDados) {
     ultimaPing = millis();
-    
+
     Serial.println("Enviando dados ao servidor...");
     enviarDadosParaServidor();
   }
-  
+
   // Pisca LED rapidamente se o ar estiver ligado
   if (arCondicionadoLigado) {
     static unsigned long ultimoPisca = 0;
     if (millis() - ultimoPisca > 2000) {
       ultimoPisca = millis();
-      
+
       // Pisca brevemente (apaga e acende)
-      digitalWrite(PINO_LED_STATUS, LOW);
+      digitalWrite(PINO_LED_STATUS, LOW); // Usa PINO_LED_STATUS de config.h
       delay(50);
-      digitalWrite(PINO_LED_STATUS, HIGH);
+      digitalWrite(PINO_LED_STATUS, HIGH); // Usa PINO_LED_STATUS de config.h
     }
   }
 }
